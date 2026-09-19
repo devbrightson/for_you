@@ -268,6 +268,9 @@ html,body{
   transform:scale(0.88) translateY(16px);
   transition:transform 0.45s cubic-bezier(.22,.61,.36,1);
 }
+.popup-card.photo-popup-card{
+  width:92%;max-width:700px;max-height:90vh;
+}
 #popup.show .popup-card{transform:scale(1) translateY(0);}
 
 .popup-icon{font-size:1.8rem;margin-bottom:0.6rem;}
@@ -286,6 +289,11 @@ html,body{
   font-size:0.85rem;line-height:1.72;
   color:rgba(255,245,251,0.9);
   text-align:left;
+}
+.photo-popup-image{
+  width:auto;height:auto;max-width:100%;max-height:65vh;
+  object-fit:contain;object-position:center;
+  display:block;margin:0 auto 0.8rem;border-radius:14px;
 }
 .popup-body.center{text-align:center;}
 .popup-divider{
@@ -367,6 +375,26 @@ html,body{
 // ═══════════════════════════════════════════════════════
 // MESSAGES DATA
 // ═══════════════════════════════════════════════════════
+// PHOTO 1 — PASTE BASE64 HERE
+const PHOTO_1 = {
+  icon: '📷',
+  title: "Notre souvenir",
+  photo: "https://drive.google.com/thumbnail?id=1Hmybb_d3B3sILAQXrx8fjPoB-yzBVqzD&sz=w2000",
+  body: "<p class='popup-body'>Notre premier souvenir ❤️</p>",
+  label: "Photo 1",
+  isPhoto: true
+};
+
+// PHOTO 2 — PASTE BASE64 HERE
+const PHOTO_2 = {
+  icon: '📷',
+  title: "Souvenir de l'université",
+  photo: "https://drive.google.com/thumbnail?id=1jEZuyLBgxx5U9EWPoFw1E8zVsvJMjqd0&sz=w2000",
+  body: "<p class='popup-body'>Un souvenir que je n'oublierai jamais ❤️</p>",
+  label: "Photo 2",
+  isPhoto: true
+};
+
 const MESSAGES = [
   {
     icon:'🌌',
@@ -403,7 +431,9 @@ const MESSAGES = [
     <div class="popup-signature">— Brightson 💫</div>`,
     label:'Message V',
     last:true
-  }
+  },
+  PHOTO_1,
+  PHOTO_2
 ];
 
 // ═══════════════════════════════════════════════════════
@@ -457,6 +487,8 @@ const MSG_POSITIONS = [
   {wx: WCX + 200,  wy: WCY + 340},   // 3
   {wx: WCX - 180,  wy: WCY - 340},   // 4
   {wx: WCX + 20,   wy: WCY - 60},    // 5  (near core)
+  {wx: WCX - 550,  wy: WCY - 180},   // PHOTO 1
+  {wx: WCX + 350,  wy: WCY + 420}    // PHOTO 2
 ];
 
 let frame=0,lastT=performance.now();
@@ -652,6 +684,8 @@ window.addEventListener('resize',()=>{
 // ═══════════════════════════════════════════════════════
 const nodesLayer = document.getElementById('nodesLayer');
 const readSet = new Set();
+const readMessages = new Set();
+let messagesReadCount = 0;
 
 const NODE_NUMERALS = ['①','②','③','④','⑤'];
 
@@ -659,9 +693,15 @@ const nodeEls = MSG_POSITIONS.map((mp,i)=>{
   const wrapper = document.createElement('div');
   wrapper.className='msg-node';
   wrapper.id=`node${i}`;
+  if(MESSAGES[i].isPhoto){
+    wrapper.classList.add('locked');
+    wrapper.style.pointerEvents='none';
+    wrapper.style.visibility='hidden';
+    wrapper.setAttribute('aria-disabled','true');
+  }
   wrapper.innerHTML=`
     <div class="node-orb">
-      <span class="node-num">${NODE_NUMERALS[i]}</span>
+      <span class="node-num">${MESSAGES[i].isPhoto ? '📷' : NODE_NUMERALS[i]}</span>
       <div class="node-check">✓</div>
     </div>
     <div class="node-label">${MESSAGES[i].label}</div>
@@ -671,16 +711,29 @@ const nodeEls = MSG_POSITIONS.map((mp,i)=>{
   // click / tap
   wrapper.addEventListener('click', e=>{
     if(hasMoved) return;
+    if(MESSAGES[i].isPhoto && readMessages.size < 5) return;
     openMessage(i);
   });
   wrapper.addEventListener('touchend', e=>{
     if(hasMoved) return;
+    if(MESSAGES[i].isPhoto && readMessages.size < 5) return;
     e.preventDefault();
     openMessage(i);
   });
 
   return wrapper;
 });
+
+function unlockPhotos(){
+  nodeEls.forEach((node,i)=>{
+    if(MESSAGES[i].isPhoto){
+      node.classList.remove('locked');
+      node.style.pointerEvents='auto';
+      node.style.visibility='visible';
+      node.removeAttribute('aria-disabled');
+    }
+  });
+}
 
 function worldToScreen(wx,wy){
   return { sx: wx - camX, sy: wy - camY };
@@ -754,6 +807,7 @@ const phost=document.getElementById('petalsLayer');
 // POPUP
 // ═══════════════════════════════════════════════════════
 const popup   = document.getElementById('popup');
+const popupCard = popup.querySelector('.popup-card');
 const popIcon  = document.getElementById('popIcon');
 const popNum   = document.getElementById('popNum');
 const popTitle = document.getElementById('popTitle');
@@ -764,10 +818,23 @@ let currentOpen = -1;
 
 function openMessage(i){
   const msg=MESSAGES[i];
-  popIcon.textContent=msg.icon;
+  if(msg.isPhoto && readMessages.size < 5) return;
+  popupCard.classList.toggle('photo-popup-card', !!msg.isPhoto);
+  popIcon.textContent=msg.isPhoto ? '📷' : msg.icon;
   popNum.textContent=`${msg.label} · ${i+1} / ${MESSAGES.length}`;
   popTitle.textContent=msg.title;
-  popBody.innerHTML=msg.body;
+  if(msg.isPhoto && msg.photo){
+    popBody.innerHTML=`<img class="photo-popup-image" src="${msg.photo}" alt="${msg.title}">${msg.body}`;
+    const photoImage=popBody.querySelector('.photo-popup-image');
+    photoImage.addEventListener('error',()=>{
+      const errorMessage=document.createElement('p');
+      errorMessage.className='popup-body';
+      errorMessage.textContent='Cette photo est momentanément indisponible.';
+      photoImage.replaceWith(errorMessage);
+    },{once:true});
+  } else {
+    popBody.innerHTML=msg.body;
+  }
 
   popNav.innerHTML='';
   // prev
@@ -783,7 +850,7 @@ function openMessage(i){
   bc.addEventListener('click',closeMessage);
   popNav.appendChild(bc);
   // next / restart
-  if(!msg.last){
+  if(!msg.last && i < MESSAGES.length - 1){
     const bn=document.createElement('button');
     bn.className='btn-pop primary';bn.textContent='Suivant →';
     bn.addEventListener('click',()=>{closeMessage();setTimeout(()=>{ travelToNode(i+1); setTimeout(()=>openMessage(i+1),700); },300);});
@@ -799,6 +866,11 @@ function openMessage(i){
   currentOpen=i;
 
   // mark as read
+  if(!msg.isPhoto){
+    readMessages.add(i);
+    messagesReadCount=readMessages.size;
+    if(messagesReadCount >= 5) unlockPhotos();
+  }
   readSet.add(i);
   nodeEls[i].classList.add('read');
   updateDots();
